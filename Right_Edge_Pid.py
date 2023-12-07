@@ -1,5 +1,3 @@
-###1801808###
-
 import rclpy
 import math
 
@@ -45,8 +43,6 @@ def PID(kp, ki, kd, target, current_input, integral_error, previous_error):
     # Compute the PID output
     output = kp * error + ki * integral_error + kd * derivative_error
 
-    # Update the previous error
-    previous_error = error
     return output
 
 
@@ -83,7 +79,7 @@ def clbk_laser(msg):
     twstmsg_ = movement()
 
 
-# Find nearest point
+# Find the nearest point
 def find_nearest(list):
     f_list = filter(lambda item: item > 0.0, list)  # exclude zeros
     return min(min(f_list, default=10), 10)
@@ -118,7 +114,6 @@ def movement():
     integral_error += error
 
     integral_error = max(min(integral_upper_limit, integral_error), integral_lower_limit)
-    derivative_error = error - previous_error
 
     previous_error = error
 

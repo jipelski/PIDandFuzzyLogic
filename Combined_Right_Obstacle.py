@@ -12,6 +12,7 @@ mynode_ = None
 pub_ = None
 regions_ = {
     'right': 0,
+    'bright': 0,
     'fright': 0,
     'front': 0,
     'fleft': 0,
@@ -32,6 +33,7 @@ def clbk_laser(msg):
 
     regions_ = {
         # LIDAR readings are anti-clockwise
+        'bright': find_nearest(msg.ranges[50:89]),
         'right': find_nearest(msg.ranges[90:129]),
         'fright': find_nearest(msg.ranges[130:169]),
         'front': find_nearest(msg.ranges[170:190]),
@@ -68,10 +70,10 @@ def get_fuzzy_value(x):
     return {"near": near_value, "medium": medium_value, "far": far_value}
 
 
-# Iterates over every rule and checks if all the antecedents are bigger than 0
+# Iterates over every rule in the Obstacle Avoidance Dictionary and checks if all the antecedents are bigger than 0
 # Calculates the firing strength of a rule
 # Returns a dictionary with the fired rules, the output of those rules and the firing strength
-def get_fired_rules(x1, x2, x3):
+def get_fired_rules_obstc(x1, x2, x3):
     aggregated_rules = {}
 
     # Fuzzify the crisp values
@@ -92,10 +94,40 @@ def get_fired_rules(x1, x2, x3):
     for rule in fired_rules:
         firing_strength = min(x1_fuzzy[rule[0]], x2_fuzzy[rule[1]], x3_fuzzy[rule[2]])
 
-        activated_rule = rules.get(rule)
+        activated_rule = rules_obstc.get(rule)
 
         aggregated_rules[rule] = {'linear': activated_rule['linear'], 'angular': activated_rule['angular'],
                                   'firing_strength': firing_strength}
+
+    return aggregated_rules
+
+
+# Iterates over every rule in the Right Edge Following Behaviour Dictionary and checks if all the antecedents are bigger than 0
+# Calculates the firing strength of a rule
+# Returns a dictionary with the fired rules, the output of those rules and the firing strength
+def get_fired_rules_right(x1, x2):
+    aggregated_rules = {}
+
+    # Fuzzify the crisp values
+    x1_fuzzy = get_fuzzy_value(x1)
+    x2_fuzzy = get_fuzzy_value(x2)
+
+    # Possible fuzzy labels
+    fuzzy_labels = ['near', 'medium', 'far']
+
+    # Identify rules that are fired
+    fired_rules = [(front_right, back_right)
+                   for front_right in fuzzy_labels if x1_fuzzy[front_right] != 0
+                   for back_right in fuzzy_labels if x2_fuzzy[back_right] != 0]
+
+    # Creates a dictionary with the fired rules, their output and the firing strength
+    for rule in fired_rules:
+        firing_strength = min(x1_fuzzy[rule[0]], x2_fuzzy[rule[1]])
+        activated_rule = rules_right.get(rule)
+
+        aggregated_rules[rule] = {'linear': activated_rule['linear'], 'angular':
+            activated_rule['angular'], 'firing_strength':
+                                      firing_strength}
 
     return aggregated_rules
 
@@ -104,13 +136,13 @@ def get_fired_rules(x1, x2, x3):
 def get_crisp_output(aggregated_rules):
     linear_range = {
         'slow': 0.05,
-        'medium': 0.15,
-        'fast': 0.25}
+        'medium': 0.085,
+        'fast': 0.12}
 
     angular_range = {
-        'left': -0.5,
+        'left': -0.4,
         'zero': 0.0,
-        'right': 0.5}
+        'right': 0.4}
 
     crisp_linear = 0.0
     crisp_angular = 0.0
@@ -121,7 +153,7 @@ def get_crisp_output(aggregated_rules):
 
     angular_numerator = 0.0
 
-    # Defuzzify values based on the rule's firing strength
+    # Deffuzify values based on the rule's firing strength
     for rule, values in aggregated_rules.items():
         firing_strength = values['firing_strength']
         linear_speed = values['linear']
@@ -140,7 +172,7 @@ def get_crisp_output(aggregated_rules):
 
 
 # Obstacle Avoidance Dictionary
-rules = {
+rules_obstc = {
     ('near', 'near', 'near'): {'linear': 'slow', 'angular': 'zero'},
     ('near', 'near', 'medium'): {'linear': 'slow', 'angular': 'right'},
     ('near', 'near', 'far'): {'linear': 'medium', 'angular': 'right'},
@@ -172,6 +204,21 @@ rules = {
     ('far', 'far', 'far'): {'linear': 'fast', 'angular': 'zero'},
 }
 
+# Right Edge Following Behaviour Dictionary
+rules_right = {
+    ('near', 'near'): {'linear': 'slow', 'angular': 'left'},
+    ('near', 'medium'): {'linear': 'slow', 'angular': 'left'},
+    ('near', 'far'): {'linear': 'slow', 'angular': 'left'},
+
+    ('medium', 'near'): {'linear': 'medium', 'angular': 'left'},
+    ('medium', 'medium'): {'linear': 'medium', 'angular': 'zero'},
+    ('medium', 'far'): {'linear': 'medium', 'angular': 'right'},
+
+    ('far', 'near'): {'linear': 'medium', 'angular': 'left'},
+    ('far', 'medium'): {'linear': 'medium', 'angular': 'right'},
+    ('far', 'far'): {'linear': 'fast', 'angular': 'zero'},
+}
+
 
 # Basic movement method
 def movement():
@@ -182,12 +229,16 @@ def movement():
     # create an object of twist class, used to express the linear and angular velocity of the turtlebot
     msg = Twist()
 
-    aggregated_rules = get_fired_rules(regions['fleft'], regions['front'], regions['fright'])
+    aggregated_rules_obstc = get_fired_rules_obstc(regions['fleft'], regions['front'], regions['fright'])
 
-    linear_speed, angular_speed = get_crisp_output(aggregated_rules)
+    linear_speed_o, angular_speed_o = get_crisp_output(aggregated_rules_obstc)
 
-    msg.linear.x = -linear_speed
-    msg.angular.z = -angular_speed
+    aggregated_rules_right = get_fired_rules_right(regions['fright'], regions['bright'])
+
+    linear_speed_r, angular_speed_r = get_crisp_output(aggregated_rules_right)
+
+    msg.linear.x = -(linear_speed_o * 0.85 + linear_speed_r * 0.15)
+    msg.angular.z = -(angular_speed_o * 0.85 + angular_speed_r * 0.15)
 
     return msg
 

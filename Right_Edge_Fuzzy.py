@@ -1,5 +1,3 @@
-###1801808###
-
 import rclpy
 import math
 
@@ -38,7 +36,7 @@ def clbk_laser(msg):
     twstmsg_ = movement()
 
 
-# Find nearest point
+# Find the nearest point
 def find_nearest(list):
     f_list = filter(lambda item: item > 0.0, list)  # exclude 'zero's
     return min(min(f_list, default=10), 10)
@@ -59,7 +57,7 @@ def trapezoidal_membership(x, a, b, c, d):
 def get_fuzzy_value(x):
     near_value = trapezoidal_membership(x, 0.0, 0.0, 0.0, 0.25)
     medium_value = trapezoidal_membership(x, 0.2, 0.33, 0.37, 0.5)
-    far_value = trapezoidal_membership(x, 0.45, 0.6, 10.0, 10.0)
+    far_value = trapezoidal_membership(x, 0.45, 0.6, 10.0, 100.0)
 
     return {"near": near_value, "medium": medium_value, "far": far_value}
 
@@ -98,13 +96,13 @@ def get_fired_rules(x1, x2):
 def get_crisp_output(aggregated_rules):
     linear_range = {
         'slow': 0.05,
-        'medium': 0.15,
-        'fast': 0.25}
+        'medium': 0.085,
+        'fast': 0.12}
 
     angular_range = {
-        'left': -0.7,
+        'left': -0.4,
         'zero': 0.0,
-        'right': 0.7}
+        'right': 0.4}
 
     crisp_linear = 0.0
     crisp_angular = 0.0
@@ -158,9 +156,6 @@ def movement():
 
     # create an object of twist class, used to express the linear and angular velocity of the turtlebot
     msg = Twist()
-
-    linear_speed = 0.0
-    angular_speed = 0.0
 
     aggregated_rules = get_fired_rules(regions['fright'], regions['bright'])
 
